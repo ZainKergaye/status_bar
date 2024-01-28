@@ -1,0 +1,130 @@
+project(
+    meson.get_external_property('name', 'unknown'),
+    'cpp',
+    version : meson.get_external_property('version', 'unknown'),
+    default_options : [ 'cpp_std=c++11' ],
+)
+
+project_name = meson.project_name()
+if project_name == 'unknown'
+    error('Failed to get project name from Conan.')
+endif
+
+project_version = meson.project_version()
+if project_version == 'unknown'
+    error('Failed to get project version from Conan.')
+endif
+
+project_type = meson.get_external_property('type', 'unknown')
+if project_type == 'unknown'
+    error('Failed to get project type from Conan.')
+endif
+
+project_dep_strings = meson.get_external_property('deps', [ 'unknown' ])
+if project_dep_strings == [ 'unknown' ]
+    error('Failed to get project dependencies from Conan.')
+endif
+
+project_deps = []
+foreach dep : project_dep_strings
+    project_deps += dependency(
+        dep[0],
+        modules : dep[1],
+        version : dep[2],
+        required : true,
+        method : 'auto',
+    )
+endforeach
+
+include_dir = meson.source_root() / 'include' / project_name
+src_dir = meson.source_root() / 'src'
+build_dir = meson.build_root()
+
+conf_data = configuration_data()
+conf_data.set('version', project_version)
+configure_file(
+    configuration : conf_data,
+    input : 'src' / 'version.hpp.in',
+    output : 'version.hpp',
+)
+
+binaries = [
+    [
+        project_name, # name
+        project_type, # type
+        project_deps, # dependencies
+        files(build_dir / 'version.hpp'), # headers
+        files(src_dir / 'version.cpp'), # sources
+        src_dir / 'main.cpp', # main
+    ],
+    # Add additional binaries here.
+]
+tests = [
+    [
+        'version', # name
+        files(src_dir / 'version.test.cpp'), # source files
+        project_deps + declare_dependency( # dependencies
+            sources : files(src_dir / 'version.cpp'),
+        ),
+    ],
+    # Add additional tests here.
+]
+
+foreach bin : binaries
+    name = bin[0]
+    type = bin[1]
+    deps = bin[2]
+    headers = bin[3]
+    sources = bin[4]
+    main = bin[5]
+
+    if type == 'application'
+        sources += main
+        executable(
+            name,
+            sources,
+            dependencies : deps,
+            install : true,
+        )
+    elif type == 'library' or type == 'header-library'
+        library(
+            name,
+            sources,
+            dependencies : deps,
+            version : project_version,
+            install : true,
+        )
+        install_headers(headers, subdir : name)
+    elif type == 'shared-library'
+        shared_library(
+            name,
+            sources,
+            dependencies : deps,
+            version : project_version,
+            install : true,
+        )
+        install_headers(headers, subdir : name)
+    elif type == 'static-library'
+        static_library(
+            name,
+            sources,
+            dependencies : deps,
+            install : true,
+        )
+        install_headers(headers, subdir : name)
+    else
+        error(
+            'Invalid binary type "' + type + '". Must be one of "application", "library", "header-library", "shared-library", or "static-library".',
+        )
+    endif
+endforeach
+
+foreach test : tests
+    test_exec = executable(
+        test[0], # name
+        test[1], # source files
+        dependencies : test[2], # dependencies
+    )
+    test(test[0], test_exec)
+endforeach
+

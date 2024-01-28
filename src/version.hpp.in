@@ -1,0 +1,8 @@
+#pragma once
+
+namespace stm {
+
+constexpr const char* compiletime_version = "@version@";
+const char* get_runtime_version();
+
+} // namespace stm
